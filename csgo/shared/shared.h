@@ -55,6 +55,8 @@ namespace config
 	extern float aimbot_smooth;
 	extern BOOL  aimbot_visibility_check;
 	extern DWORD triggerbot_button;
+	extern BOOL aimlock;
+	extern DWORD aimlock_button;
 }
 
 namespace csgo

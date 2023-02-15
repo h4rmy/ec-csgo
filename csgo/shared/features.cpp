@@ -40,6 +40,7 @@ namespace features
 	static void     in_cross_triggerbot(C_Player local_player);
 	static BOOL     triggerbot(C_Player local_player, C_Player target_player, C_Team target_team, cs::WEAPON_CLASS weapon_class);
 	static void     aimbot(C_Player local_player, C_Player target_player, cs::WEAPON_CLASS weapon_class, DWORD bullet_count, BOOL head_only);
+	static void     aimlock(C_Player local_player, C_Player target_player, cs::WEAPON_CLASS weapon_class, DWORD bullet_count, BOOL head_only);
 	static vec3     get_target_angle(C_Player local_player, vec3 position, DWORD bullet_count);
 	static C_Player get_best_target(C_Player local_player, DWORD bullet_count, C_Team* target_team);
 }
@@ -80,10 +81,10 @@ void features::run(void)
 	}
 
 	BOOL mouse_1 = cs::input::get_button_state(107);
-	BOOL lock_button = cs::input::get_button_state(100);
+	BOOL aimlock_button = cs::input::get_button_state(config::aimlock_button);
 	BOOL aimbot_button = cs::input::get_button_state(config::aimbot_button);
 	BOOL triggerbot_button = cs::input::get_button_state(config::triggerbot_button);
-	BOOL current_button = aimbot_button + triggerbot_button + mouse_1 + lock_button;
+	BOOL current_button = aimbot_button + triggerbot_button + mouse_1 + aimlock_button;
 
 
 
@@ -152,21 +153,7 @@ void features::run(void)
 		return;
 	}
 
-
-	if (lock_button)
-	{
-		config::aimbot_fov = 50.0f;
-		config::aimbot_smooth = 0.0f;
-		m_aimbot_active = 1;
-		m_viewangles = cs::player::get_viewangles(local_player);
-	}
-	else {
-		config::aimbot_fov = 3.0f;
-		config::aimbot_smooth = 9.0f;
-		m_aimbot_active = 0;
-	}
-
-	if (aimbot_button || triggerbot_button || lock_button)
+	if (aimbot_button || triggerbot_button || aimlock_button)
 	{
 		m_aimbot_active = 1;
 
@@ -176,7 +163,12 @@ void features::run(void)
 		//
 		m_viewangles = cs::player::get_viewangles(local_player);
 	}
-	else
+	else if (aimlock_button)
+	{
+		m_aimbot_active = 1;
+		m_viewangles = cs::player::get_viewangles(local_player);
+	}
+	else 
 	{
 		m_aimbot_active = 0;
 	}
@@ -233,14 +225,20 @@ void features::run(void)
 	if (b_can_aimbot)
 	{
 		BOOL force_head_only = 0;
-		if (triggerbot_button || lock_button)
+		if (triggerbot_button || aimlock_button)
 		{
 			force_head_only = triggerbot(local_player, target_player, target_team, m_weapon_class);
 		}
 
-		if (aimbot_button || triggerbot_button || lock_button)
+		if (aimbot_button || triggerbot_button)
 		{
 			features::aimbot(local_player,
+				target_player, m_weapon_class, rcs_bullet_count, force_head_only);
+		}
+
+		if (aimlock_button && config::aimlock)
+		{
+			features::aimlock(local_player,
 				target_player, m_weapon_class, rcs_bullet_count, force_head_only);
 		}
 	}
@@ -529,6 +527,7 @@ static BOOL features::triggerbot(C_Player local_player, C_Player target_player, 
 
 static void features::aimbot(C_Player local_player, C_Player target_player, cs::WEAPON_CLASS weapon_class, DWORD bullet_count, BOOL head_only)
 {
+
 	if (config::aimbot_visibility_check && !cs::player::is_visible(local_player, target_player))
 	{
 		return;
@@ -714,6 +713,233 @@ static void features::aimbot(C_Player local_player, C_Player target_player, cs::
 	{
 		smooth = 2.0f;
 	}
+
+	DWORD aim_ticks = 0;
+	if (smooth >= 1.0f) {
+		if (sx < x)
+			sx = sx + 1.0f + (x / smooth);
+		else if (sx > x)
+			sx = sx - 1.0f + (x / smooth);
+		else
+			sx = x;
+
+		if (sy < y)
+			sy = sy + 1.0f + (y / smooth);
+		else if (sy > y)
+			sy = sy - 1.0f + (y / smooth);
+		else
+			sy = y;
+		aim_ticks = (DWORD)(smooth / 100.0f);
+	}
+	else {
+		sx = x;
+		sy = y;
+	}
+
+	if (qabs((int)sx) > 127)
+		return;
+
+	if (qabs((int)sy) > 127)
+		return;
+
+	DWORD current_tick = cs::engine::get_current_tick();
+	if (current_tick - m_previous_tick > aim_ticks)
+	{
+		m_previous_tick = current_tick;
+		input::mouse_move((int)sx, (int)sy);
+		// cs::input::mouse_move((int)sx, (int)sy);
+	}
+}
+
+static void features::aimlock(C_Player local_player, C_Player target_player, cs::WEAPON_CLASS weapon_class, DWORD bullet_count, BOOL head_only)
+{
+
+	if (config::aimbot_visibility_check && !cs::player::is_visible(local_player, target_player))
+	{
+		return;
+	}
+
+	//
+	// anti-shake for triggerbot (disables RCS from first 2 bullets)
+	//
+	if (head_only)
+	{
+		bullet_count = 609;
+	}
+
+	vec3 aimbot_angle = vec3{ 0, 0, 0 };
+	if (weapon_class == cs::WEAPON_CLASS::Pistol || head_only)
+	{
+		matrix3x4_t matrix;
+		if (!cs::player::get_bone_position(target_player, 8, &matrix))
+		{
+			return;
+		}
+
+		vec3 temp_pos{};
+		temp_pos.x = matrix[0][3];
+		temp_pos.y = matrix[1][3];
+		temp_pos.z = matrix[2][3];
+
+		aimbot_angle = get_target_angle(local_player, temp_pos, bullet_count);
+	}
+	else
+	{
+		BOOL best_target_found = 0;
+		float best_fov = 360.0f;
+		int bones[] = { 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 };
+
+		//
+		// this code is probably written drunk, but hey. it works
+		//
+		for (int j = 0; j < sizeof(bones) / sizeof(*bones); j++) {
+			matrix3x4_t matrix;
+
+			int bone_index = bones[j];
+
+			if (bones[j] == 9)
+				bone_index = 5;
+
+			else if (bones[j] == 10)
+				bone_index = 5;
+
+			else if (bones[j] == 11)
+				bone_index = 4;
+
+			else if (bones[j] == 12)
+				bone_index = 4;
+
+			else if (bones[j] == 13)
+				bone_index = 3;
+
+			else if (bones[j] == 14)
+				bone_index = 3;
+
+			else if (bones[j] == 15)
+				bone_index = 0;
+
+			else if (bones[j] == 16)
+				bone_index = 0;
+
+			else if (bones[j] == 17)
+				bone_index = 7;
+
+			else if (bones[j] == 18)
+				bone_index = 7;
+
+			if (!cs::player::get_bone_position(target_player, bone_index, &matrix))
+			{
+				return;
+			}
+
+
+			vec3 temp_pos{};
+			temp_pos.x = matrix[0][3];
+			temp_pos.y = matrix[1][3];
+			temp_pos.z = matrix[2][3];
+
+
+			if (bones[j] == 9) {
+				temp_pos.y -= -7.0f;
+			}
+
+			else if (bones[j] == 10) {
+				temp_pos.y += -7.0f;
+			}
+
+			else if (bones[j] == 11) {
+				temp_pos.y -= -7.0f;
+			}
+
+			else if (bones[j] == 12) {
+				temp_pos.y += -5.0f;
+			}
+
+			else if (bones[j] == 13) {
+				temp_pos.y -= -5.0f;
+			}
+
+			else if (bones[j] == 14) {
+				temp_pos.y += -5.0f;
+			}
+
+			else if (bones[j] == 15) {
+				temp_pos.y -= -5.0f;
+			}
+
+			else if (bones[j] == 16) {
+				temp_pos.y += -5.0f;
+			}
+
+			else if (bones[j] == 17) {
+				temp_pos.y -= -5.0f;
+				temp_pos.z += -2.0f;
+			}
+
+			else if (bones[j] == 18) {
+				temp_pos.y += -5.0f;
+				temp_pos.z += -2.0f;
+			}
+
+
+			vec3 best_angle = get_target_angle(local_player, temp_pos, bullet_count);
+			float fov = math::get_fov(m_viewangles, *(vec3*)&best_angle);
+
+			if (fov < best_fov)
+			{
+				best_fov = fov;
+				aimbot_angle = best_angle;
+				best_target_found = 1;
+			}
+		}
+
+		if (best_target_found == 0)
+		{
+			return;
+		}
+	}
+
+
+	float fov = math::get_fov(m_viewangles, aimbot_angle);
+	if (fov > config::aimbot_fov)
+	{
+		return;
+	}
+
+	int zoom_fov = cs::player::get_fov(local_player);
+	float sensitivity = cs::engine::get_sensitivity();
+	if (zoom_fov != 0 && zoom_fov != 90) {
+		sensitivity = (zoom_fov / 90.0f) * sensitivity;
+	}
+
+	vec3 angles{};
+	angles.x = m_viewangles.x - aimbot_angle.x;
+	angles.y = m_viewangles.y - aimbot_angle.y;
+	angles.z = 0;
+
+	math::vec_clamp(&angles);
+	if (qabs(angles.x) > 25.00f || qabs(angles.y) > 25.00f)
+	{
+		return;
+	}
+
+	float x = angles.y;
+	float y = angles.x;
+
+	x = (x / sensitivity) / 0.022f;
+	y = (y / sensitivity) / -0.022f;
+
+	float sx = 0.0f, sy = 0.0f;
+	float smooth = 2.0f; // SMOOTH FOR AIMLOCK //
+
+	//
+	// xd
+	//
+	/*
+	if (smooth < 2.0f)
+	{
+		smooth = 2.0f;
+	}*/
 
 	DWORD aim_ticks = 0;
 	if (smooth >= 1.0f) {
