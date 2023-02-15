@@ -3,8 +3,10 @@ open-source EC project from a cool guy ekknod with my own tweaks
 
 ## tweaks:
 ```
-- aim lock on f9
+- aim lock added, configure in main.cpp
 ```
+[keycodes list](https://github.com/h4rmy/ec-csgo/blob/master/vk.txt)
+
 
 # installing and running:
 ```
