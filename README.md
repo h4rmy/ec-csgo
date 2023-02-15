@@ -3,7 +3,7 @@ open-source EC project from a cool guy ekknod with my own tweaks
 
 ## tweaks:
 ```
-- aim lock added, configure in main.cpp
+- aim lock added (left alt by default), configure in main.cpp
 ```
 [keycodes list](https://github.com/h4rmy/ec-csgo/blob/master/vk.txt)
 
