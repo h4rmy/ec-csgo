@@ -3,7 +3,7 @@ open-source EC project from a cool guy ekknod with my own tweaks
 
 ## tweaks:
 ```
-- aim lock on f9
+- aim lock added, configure in main.cpp
 ```
 
 # installing and running:
