@@ -89,14 +89,15 @@ namespace input
 
 namespace config
 {
+	// keycodes are listed in vk.txt
 	BOOL  rcs = 0;
 	DWORD aimbot_button = 107;
 	float aimbot_fov = 3.0f;
 	float aimbot_smooth = 12.0f;
 	BOOL  aimbot_visibility_check = 1;
 	DWORD triggerbot_button = 111;
-	BOOL aimlock = 0;
-	DWORD aimlock_button = 100;
+	BOOL aimlock = 1;
+	DWORD aimlock_button = 81; 
 }
 
 static void NtSleep(DWORD milliseconds);
